@@ -15,7 +15,7 @@ public class PoolManager :MonoBehaviour{
     }
 
     private ListPool<GameObject> gameObjectPool;
-    private ListPool<Object> normalClassPool;
+    private ListPool<object> normalClassPool;
     private SinglePool<Object> softSourcePool;
     private SinglePool<GameObject> gameObjectCache;
 
@@ -29,14 +29,13 @@ public class PoolManager :MonoBehaviour{
         else
         {
             gameObjectPool = new ListPool<GameObject>();
-            normalClassPool = new ListPool<Object>();
+            normalClassPool = new ListPool<object>();
             softSourcePool = new SinglePool<Object>();
             gameObjectCache = new SinglePool<GameObject>();
             instance = this;
             DontDestroyOnLoad(gameObject);
         }
     }
-
 
     /// <summary>
     /// 非泛型方法，加载游戏物体，传入参数为想要加载的GameObject的名字
@@ -63,9 +62,9 @@ public class PoolManager :MonoBehaviour{
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public T LoadObject<T>() where T: Object, new()
+    public T LoadObject<T>() where T: new()
     {
-        T obj = null;
+        T obj = default(T);
         System.Type type = typeof(T);
         obj = (T)normalClassPool.Load(type.Name);
         if(obj == null)
@@ -78,7 +77,7 @@ public class PoolManager :MonoBehaviour{
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="t"></param>
-    public void RecycleObject<T>(T t) where T:Object
+    public void RecycleObject<T>(T t)
     {
         System.Type type = typeof(T);
         normalClassPool.Recycle(type.Name,t);

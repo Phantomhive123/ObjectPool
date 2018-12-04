@@ -1,12 +1,16 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
+using UnityEditor;
 using UnityEngine;
 
 public class TestExample : MonoBehaviour {
 
     List<GameObject> gameobjList=new List<GameObject>();
-    List<Object> objList=new List<Object>();
-    List<Object> softScource=new List<Object>();
+    List<object> objList=new List<object>();
+    List<object> objList1 = new List<object>();
+    //List<Object> softScource=new List<Object>();
 
 	// Use this for initialization
 	void Start () {
@@ -20,6 +24,7 @@ public class TestExample : MonoBehaviour {
 
     public void Print()
     {
+        ClearConsole();
         PoolManager.Instance.Print();
     }
 
@@ -56,9 +61,40 @@ public class TestExample : MonoBehaviour {
             objList.Remove(objList[objList.Count - 1]);
         }
     }
+
+    public void LoadNormalClass1()
+    {
+        another a = PoolManager.Instance.LoadObject<another>();
+        objList1.Add(a);
+    }
+
+    public void RecycleNormalClass1()
+    {
+        if (objList1.Count == 0)
+            Debug.Log("no normal class to recycle");
+        else
+        {
+            PoolManager.Instance.RecycleObject<another>((another)objList1[objList1.Count - 1]);
+            objList1.Remove(objList1[objList1.Count - 1]);
+        }
+    }
+
+    [MenuItem("Tools/Clear Console %&c")]
+    public static void ClearConsole()
+    {
+        Assembly assembly = Assembly.GetAssembly(typeof(SceneView));
+        Type logEntries = assembly.GetType("UnityEditor.LogEntries");
+        MethodInfo clearConsoleMethod = logEntries.GetMethod("Clear");
+        clearConsoleMethod.Invoke(new object(), null);
+    }
 }
 
-public class test: Object
+public class test
+{
+
+}
+
+public class another
 {
 
 }
