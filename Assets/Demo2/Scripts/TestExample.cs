@@ -88,6 +88,8 @@ public class TestExample : MonoBehaviour {
         MethodInfo clearConsoleMethod = logEntries.GetMethod("Clear");
         clearConsoleMethod.Invoke(new object(), null);
     }
+
+
 }
 
 public class test
