@@ -14,8 +14,9 @@ public class TestExample : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-		
-	}
+        PoolManager.Instance.LoadObject<Texture2D>("Square");
+        PoolManager.Instance.LoadObject<Texture2D>("Cube");
+    }
 	
 	// Update is called once per frame
 	void Update () {

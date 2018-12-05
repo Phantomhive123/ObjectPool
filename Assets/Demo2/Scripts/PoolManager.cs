@@ -58,7 +58,7 @@ public class PoolManager :MonoBehaviour{
     }
 
     /// <summary>
-    /// 泛型方法，用于加载用户自定义的类，无传入参数，但是需要制定泛型的类型
+    /// 泛型方法，用于加载用户自定义的类，无传入参数，但是需要指定泛型的类型
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
@@ -71,6 +71,20 @@ public class PoolManager :MonoBehaviour{
             obj = new T();
         return obj; 
     }
+
+    /// <summary>
+    /// 泛型方法，用于加载软资源，需要传入资源类型和在resource文件夹下的路径
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="path"></param>
+    /// <returns></returns>
+    public T LoadObject<T>(string path) where T : Object
+    {
+        T obj = default(T);
+        obj = (T)softSourcePool.LoadFromResources<T>(path);
+        return obj;
+    }
+
 
     /// <summary>
     /// 泛型方法，用于回收用户自定义的类，需要参数和类型
@@ -166,6 +180,11 @@ class SinglePool<T> where T:Object
         if (!objectList.TryGetValue(name, out t))
         {
             t = Resources.Load<E>(name);
+            if(t==default(T))
+            {
+                Debug.LogWarning("no such source to load: <"+typeof(E).Name+">"+name);
+                return t;
+            }
             objectList.Add(name, t);
         }
         return t;
