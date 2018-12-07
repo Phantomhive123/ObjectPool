@@ -5,11 +5,11 @@ using UnityEngine;
 public class PoolManager :MonoBehaviour{
 
     #region 定义一些内部类
-    private abstract class Pool
+    private abstract class NumLimit
     {
         protected readonly int MAX_NUM;
         protected int _numOfPool = 0;
-        protected int NumOfPool
+        public int NumOfPool
         {
             set
             {
@@ -30,100 +30,119 @@ public class PoolManager :MonoBehaviour{
                 return _numOfPool;
             }
         }
-        protected List<string> order;
 
-        public Pool(int max)
+        public NumLimit(int max)
         {
-            MAX_NUM = max;
-            order = new List<string>();
+            if(max<=0)
+            {
+                Debug.LogError("对象池设定的上限不可小于等于0,已修改为默认值");
+                MAX_NUM = 10;
+            }
+            else
+                MAX_NUM = max;
+        }
+
+        public NumLimit()
+        {
+            MAX_NUM = 10;
         }
 
         public virtual void CleanByLRU()
         {
-
+            if (NumOfPool == 0)
+                Debug.LogWarning("LRU时数组为空");
         }
     }
 
-    private class ListPool<T>:Pool
+    private class ObjectList<T> : NumLimit
     {
-        private Dictionary<string, List<T>> objectList;
+        private List<T> list;
 
-        public ListPool():base(10)
+        public ObjectList()
         {
-            objectList = new Dictionary<string, List<T>>();
-            order = new List<string>();
+            list = new List<T>();
         }
 
-        public T Load(string name)
+        public ObjectList(int max):base(max)
         {
-            List<T> list = null;
-            if (!objectList.TryGetValue(name, out list))
+            list = new List<T>();
+        }
+
+        public T GetLastOne()
+        {
+            if (NumOfPool == 0)
             {
                 return default(T);
             }
-
-            if (list.Count == 0)
-                return default(T);
             else
             {
                 T t = list[list.Count - 1];
-                NumOfPool--;
                 list.Remove(t);
-                order.Remove(name);
+                NumOfPool--;
                 return t;
             }
         }
 
-        public void Recycle(string name, T t)
+        public void AddObject(T t)
         {
             NumOfPool++;
-            List<T> list = null;
-            if (!objectList.TryGetValue(name, out list))
-            {
-                list = new List<T>();               
-            }
-            else
-            {
-                objectList.Remove(name);
-            }
-            order.Add(name);
             list.Add(t);
-            objectList.Add(name, list);            
-        }
-
-        public void Print(string s)
-        {
-            Debug.Log(s);
-            foreach (KeyValuePair<string, List<T>> c in objectList)
-            {
-                Debug.Log("name:" + c.Key + "   num:" + c.Value.Count);
-            }
-            Debug.LogWarning(s);
-            foreach(string str in order)
-            {
-                Debug.LogWarning(str);
-            }
         }
 
         public override void CleanByLRU()
         {
             base.CleanByLRU();
-            List<T> list = null;
-            if (order.Count!=0 && objectList.TryGetValue(order[0], out list))
-            {
-                list.RemoveAt(0);
-                order.RemoveAt(0);
-            }
+            T t = list[0];
+            list.Remove(t);
         }
     }
 
-    private class SinglePool<T>:Pool where T : Object
+    private class ListPool<T>
+    {
+        private Dictionary<string, ObjectList<T>> objectList;
+
+        public ListPool()
+        {
+            objectList = new Dictionary<string, ObjectList<T>>();
+        }
+
+        public T Load(string name)
+        {
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                return default(T);
+            }
+
+            return list.GetLastOne();
+        }
+
+        public void Recycle(string name, T t)
+        {
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                list = new ObjectList<T>();
+                objectList.Add(name, list);
+            }
+            list.AddObject(t);        
+        }
+
+        public void Print(string s)
+        {
+            Debug.Log(s);
+        }
+    }
+
+    private class SinglePool<T>:NumLimit where T : Object
     {
         private Dictionary<string, T> objectList;
+        private List<string> order;
 
         public SinglePool():base(5)
         {
             objectList = new Dictionary<string, T>();
+            order = new List<string>();
         }
 
         public T LoadFromResources<E>(string name) where E : T
@@ -168,7 +187,7 @@ public class PoolManager :MonoBehaviour{
                 order.RemoveAt(0);
             }
         }
-    }
+    } 
     #endregion
 
     #region 单例模式
