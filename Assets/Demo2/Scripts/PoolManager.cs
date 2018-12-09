@@ -13,17 +13,18 @@ public class PoolManager :MonoBehaviour{
         {
             set
             {
-                if (_numOfPool < 0)
+                if (value < 0)
                 {
                     _numOfPool = 0;
+                    return;
                 }
-                else if (_numOfPool >= MAX_NUM)
+
+                while(value>MAX_NUM)
                 {
                     CleanByLRU();
-                    _numOfPool = MAX_NUM;
+                    value--;
                 }
-                else
-                    _numOfPool = value;
+                _numOfPool = value;
             }
             get
             {
@@ -57,15 +58,21 @@ public class PoolManager :MonoBehaviour{
     private class ObjectList<T> : NumLimit
     {
         private List<T> list;
+        private List<T> onUse;
+        private List<T> destroyQueue;
 
         public ObjectList()
         {
             list = new List<T>();
+            onUse = new List<T>();
+            destroyQueue = new List<T>();
         }
 
         public ObjectList(int max):base(max)
         {
             list = new List<T>();
+            onUse = new List<T>();
+            destroyQueue = new List<T>();
         }
 
         public T GetLastOne()
@@ -78,6 +85,7 @@ public class PoolManager :MonoBehaviour{
             {
                 T t = list[list.Count - 1];
                 list.Remove(t);
+                onUse.Add(t);
                 NumOfPool--;
                 return t;
             }
@@ -87,6 +95,16 @@ public class PoolManager :MonoBehaviour{
         {
             NumOfPool++;
             list.Add(t);
+            if(onUse.Contains(t))
+            {
+                onUse.Remove(t);
+            }
+        }
+
+        public void AddToOnUse(T t)
+        {
+            if (!onUse.Contains(t))
+                onUse.Add(t);
         }
 
         public override void CleanByLRU()
@@ -94,6 +112,36 @@ public class PoolManager :MonoBehaviour{
             base.CleanByLRU();
             T t = list[0];
             list.Remove(t);
+            DestroyObject(t);
+        }
+
+        //TODO
+        public void DestroyObject(T t)
+        {
+            if (list.Contains(t))
+                list.Remove(t);
+            if (onUse.Contains(t))
+                onUse.Remove(t);
+            if (!destroyQueue.Contains(t))
+                destroyQueue.Add(t);
+        }
+
+        //TODO
+        public void DestroyAll()
+        {
+            list.Clear();
+            onUse.Clear();
+            destroyQueue.Clear();
+        }
+
+        //TODO
+        public void RealDestroy()
+        {
+            if (destroyQueue.Count != 0)
+            {
+                T t = destroyQueue[0];
+                destroyQueue.RemoveAt(0);
+            }
         }
     }
 
@@ -113,7 +161,6 @@ public class PoolManager :MonoBehaviour{
             {
                 return default(T);
             }
-
             return list.GetLastOne();
         }
 
@@ -126,6 +173,23 @@ public class PoolManager :MonoBehaviour{
                 objectList.Add(name, list);
             }
             list.AddObject(t);        
+        }
+
+        public void Recycle(string name, T t, int max)
+        {
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                list = new ObjectList<T>(max);
+                objectList.Add(name, list);
+            }
+            list.AddObject(t);
+        }
+
+        //TODO
+        public void DestroyObj(string name, T t)
+        {
+           
         }
 
         public void Print(string s)
@@ -185,9 +249,11 @@ public class PoolManager :MonoBehaviour{
             {
                 objectList.Remove(order[0]);
                 order.RemoveAt(0);
+                Resources.UnloadAsset(t);
             }
         }
     } 
+    
     #endregion
 
     #region 单例模式
@@ -299,6 +365,18 @@ public class PoolManager :MonoBehaviour{
         obj.SetActive(false);
         gameObjectPool.Recycle(obj.name,obj);
     }
+
+    public void RecycleObject(GameObject obj,int max)
+    {
+        obj.SetActive(false);
+        gameObjectPool.Recycle(obj.name, obj,max);
+    }
+
+    public void RecycleObject<T>(T t,int max)
+    {
+        System.Type type = typeof(T);
+        normalClassPool.Recycle(type.Name, t,max);
+    }
     #endregion
 
     #region TODO
@@ -308,11 +386,6 @@ public class PoolManager :MonoBehaviour{
         normalClassPool.Print("---------------normalClassPool-------------------");
         softSourcePool.Print("---------------softScourcePool-------------------");
         gameObjectCache.Print("---------------gameObjectCache-------------------");
-    }
-
-    public void Destroy()
-    {
-
     }
 
     private void Release()
