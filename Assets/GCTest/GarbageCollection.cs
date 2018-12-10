@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace GC1
@@ -8,6 +9,7 @@ namespace GC1
     {
 
         List<Test> list = new List<Test>();
+        public GameObject obj;
 
         // Use this for initialization
         void Start()
@@ -18,6 +20,9 @@ namespace GC1
             list.Add(t1);
             list.Add(t2);
             list.Add(t3);
+            System.Type type = typeof(Object);
+            System.Reflection.MethodInfo method = type.GetMethod("Destroy", new System.Type[] { typeof(Object) });
+            method.Invoke(null, new object[] { obj });
         }
 
         // Update is called once per frame

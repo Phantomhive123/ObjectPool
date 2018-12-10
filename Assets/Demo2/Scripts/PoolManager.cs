@@ -111,7 +111,6 @@ public class PoolManager :MonoBehaviour{
         {
             base.CleanByLRU();
             T t = list[0];
-            list.Remove(t);
             DestroyObject(t);
         }
 
@@ -141,6 +140,13 @@ public class PoolManager :MonoBehaviour{
             {
                 T t = destroyQueue[0];
                 destroyQueue.RemoveAt(0);
+                //-----------
+                if (typeof(T) == typeof(GameObject))
+                {
+                    System.Type type = typeof(Object);
+                    System.Reflection.MethodInfo method = type.GetMethod("Destroy", new System.Type[] { typeof(Object) });
+                    method.Invoke(null, new object[] { t });
+                }
             }
         }
     }
