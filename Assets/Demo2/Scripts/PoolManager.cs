@@ -2,9 +2,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+//定义一个全局的泛型委托
+public delegate void DestroyDelegate<T>(T t);
+
+[RequireComponent(typeof(DestroyManager))]
 public class PoolManager :MonoBehaviour{
 
     #region 定义一些内部类
+    /// <summary>
+    /// 限制对象池数量上限的抽象类
+    /// </summary>
     private abstract class NumLimit
     {
         protected readonly int MAX_NUM;
@@ -48,24 +55,33 @@ public class PoolManager :MonoBehaviour{
             MAX_NUM = 10;
         }
 
-        public virtual void CleanByLRU()
+        protected virtual void CleanByLRU()
         {
             if (NumOfPool == 0)
                 Debug.LogWarning("LRU时数组为空");
         }
     }
 
+    /// <summary>
+    /// 同一物体的对象池（游戏物体或者非Mono的普通class）
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
     private class ObjectList<T> : NumLimit
     {
+        #region 所有字段
         private List<T> list;
         private List<T> onUse;
         private List<T> destroyQueue;
+        public DestroyDelegate<T> des;
+        #endregion
 
-        public ObjectList()
+        #region 构造方法
+        public ObjectList():base()
         {
             list = new List<T>();
             onUse = new List<T>();
             destroyQueue = new List<T>();
+            des = RemoveFromQueue;
         }
 
         public ObjectList(int max):base(max)
@@ -73,101 +89,180 @@ public class PoolManager :MonoBehaviour{
             list = new List<T>();
             onUse = new List<T>();
             destroyQueue = new List<T>();
+            des = RemoveFromQueue;
         }
+        #endregion
 
-        public T GetLastOne()
+        #region 对外的接口方法       
+        public T GetObject()
         {
-            if (NumOfPool == 0)
+            T t = default(T);
+            //尝试从销毁队列中获取
+            if (destroyQueue.Count!=0)
             {
-                return default(T);
-            }
-            else
-            {
-                T t = list[list.Count - 1];
-                list.Remove(t);
+                t = destroyQueue[0];
+                DestroyManager.Instance.CancelDestroy(t);
+                destroyQueue.RemoveAt(0);
                 onUse.Add(t);
-                NumOfPool--;
                 return t;
             }
+            //尝试从对象池中获取
+            if(NumOfPool>0)
+            {
+                t = list[list.Count - 1];
+                list.Remove(t);
+                NumOfPool--;
+                onUse.Add(t);               
+            }
+            return t;
         }
-
-        public void AddObject(T t)
+        
+        public void RecycleObject(T t)
         {
             NumOfPool++;
             list.Add(t);
-            if(onUse.Contains(t))
+            onUse.Remove(t);
+        }
+        
+        public void AddToDestroyQueue(T t)
+        {
+            onUse.Remove(t);
+            if (list.Remove(t))
+                NumOfPool--;
+            if (!destroyQueue.Contains(t))
+                destroyQueue.Add(t);
+            DestroyManager.Instance.StartDestroy(t,des);
+        }
+        
+        public void CleanAllTheObjects()
+        {
+            foreach (T t in list)
             {
-                onUse.Remove(t);
+                des(t);
+            }
+            list.Clear();
+            foreach (T t in onUse)
+            {
+                des(t);
+            }
+            onUse.Clear();
+            foreach (T t in destroyQueue)
+            {
+                DestroyManager.Instance.CancelDestroy(t);
+                des(t);
+            }  
+            destroyQueue.Clear();
+        }
+        
+        public void DestroyImmediately(T t)
+        {
+            onUse.Remove(t);
+            list.Remove(t);
+            destroyQueue.Remove(t);
+
+            //使用委托完成删除
+            DestroyManager.Instance.CancelDestroy(t);
+            des(t);
+            
+            //以下是反射的实现方法
+            //if(typeof(T)==typeof(GameObject))
+            //{
+            //    DestroyManager.Instance.CancelDestroy(t);
+            //    DestroyManager.DestroyReflection(t);
+            //}           
+        }
+        #endregion
+
+        #region 有固定的调用场景的方法，外界不能随意调用        
+        public void DestroyByTime()
+        {
+            if (list.Count != 0)
+            {
+                T t = list[0];
+                AddToDestroyQueue(t);
             }
         }
 
+        public void Print()
+        {
+            Debug.Log("List:" + list.Count);
+            Debug.Log("OnUse:" + onUse.Count);
+            Debug.Log("DestroyQueue" + destroyQueue.Count);
+        }
+        
+        //主要是为了把从缓存中获取的物体纳入对象池的管理
         public void AddToOnUse(T t)
         {
-            if (!onUse.Contains(t))
+            if(!onUse.Contains(t))
                 onUse.Add(t);
         }
+        #endregion
 
-        public override void CleanByLRU()
+        #region 私有方法
+        //到达上限的删除方法
+        protected override void CleanByLRU()
         {
             base.CleanByLRU();
             T t = list[0];
-            DestroyObject(t);
+            AddToDestroyQueue(t);
         }
-
-        //TODO
-        public void DestroyObject(T t)
+        //从列表中移除的方法，仅供委托使用
+        private void RemoveFromQueue(T t)
         {
-            if (list.Contains(t))
-                list.Remove(t);
-            if (onUse.Contains(t))
-                onUse.Remove(t);
-            if (!destroyQueue.Contains(t))
-                destroyQueue.Add(t);
+            destroyQueue.Remove(t);
         }
-
-        //TODO
-        public void DestroyAll()
-        {
-            list.Clear();
-            onUse.Clear();
-            destroyQueue.Clear();
-        }
-
-        //TODO
-        public void RealDestroy()
-        {
-            if (destroyQueue.Count != 0)
-            {
-                T t = destroyQueue[0];
-                destroyQueue.RemoveAt(0);
-                //-----------
-                if (typeof(T) == typeof(GameObject))
-                {
-                    System.Type type = typeof(Object);
-                    System.Reflection.MethodInfo method = type.GetMethod("Destroy", new System.Type[] { typeof(Object) });
-                    method.Invoke(null, new object[] { t });
-                }
-            }
-        }
+        #endregion
     }
 
+    /// <summary>
+    /// 同一类对象池的管理（dictionary大池）
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
     private class ListPool<T>
     {
+        #region 所有字段
         private Dictionary<string, ObjectList<T>> objectList;
+        public DestroyDelegate<T> destroyDelegate;
+        #endregion
 
+        #region 构造方法
         public ListPool()
         {
             objectList = new Dictionary<string, ObjectList<T>>();
         }
+        #endregion
 
+        #region 对外的接口方法
         public T Load(string name)
         {
             ObjectList<T> list = null;
             if (!objectList.TryGetValue(name, out list))
             {
+                list = new ObjectList<T>();
+                if (destroyDelegate != null)
+                {
+                    list.des += destroyDelegate;
+                }
+                objectList.Add(name, list);               
                 return default(T);
             }
-            return list.GetLastOne();
+            return list.GetObject();
+        }
+
+        public T Load(string name, int max)
+        {
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                list = new ObjectList<T>(max);
+                if (destroyDelegate != null)
+                {
+                    list.des += destroyDelegate;
+                }
+                objectList.Add(name, list);
+                return default(T);
+            }
+            return list.GetObject();
         }
 
         public void Recycle(string name, T t)
@@ -175,46 +270,102 @@ public class PoolManager :MonoBehaviour{
             ObjectList<T> list = null;
             if (!objectList.TryGetValue(name, out list))
             {
-                list = new ObjectList<T>();
-                objectList.Add(name, list);
+                Debug.LogWarning("不存在对应的对象池:"+name);
+                return;
             }
-            list.AddObject(t);        
+            list.RecycleObject(t);        
         }
 
-        public void Recycle(string name, T t, int max)
+        public void DestroyObj(string name, T t)
         {
             ObjectList<T> list = null;
             if (!objectList.TryGetValue(name, out list))
             {
-                list = new ObjectList<T>(max);
-                objectList.Add(name, list);
+                Debug.LogWarning("不存在对应的对象池:" + name);
+                return;
             }
-            list.AddObject(t);
+            list.AddToDestroyQueue(t);
         }
 
-        //TODO
-        public void DestroyObj(string name, T t)
+        public void DestroyCertainObjs(string name)
         {
-           
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                Debug.LogWarning("不存在对应的对象池:" + name);
+                return;
+            }
+            list.CleanAllTheObjects();
         }
 
+        public void DestroyImmediately(string name, T t)
+        {
+            ObjectList<T> list = null;
+            if (!objectList.TryGetValue(name, out list))
+            {
+                Debug.LogWarning("不存在对应的对象池:" + name);
+                return;
+            }
+            list.DestroyImmediately(t);
+        }
+        #endregion
+
+        #region 有固定的调用场景的public方法
         public void Print(string s)
         {
             Debug.Log(s);
+            foreach(KeyValuePair<string,ObjectList<T>> pair in objectList)
+            {
+                Debug.Log("------------------");
+                Debug.Log(pair.Key);
+                pair.Value.Print();
+            }
         }
+        
+        //将从缓存中获取的物体纳入内存池管理
+        public void AddToOnUse(string name, T t)
+        {
+            ObjectList<T> list = null;
+            objectList.TryGetValue(name, out list);
+            list.AddToOnUse(t);
+        }
+        
+        public void DestroyByTime()
+        {
+            foreach(ObjectList<T> pool in objectList.Values)
+            {
+                pool.DestroyByTime();
+            }
+        }
+        #endregion
     }
 
+    /// <summary>
+    /// 全局单一物体的对象池（软资源或者游戏物体缓存）
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
     private class SinglePool<T>:NumLimit where T : Object
     {
+        #region 所有字段
         private Dictionary<string, T> objectList;
         private List<string> order;
+        #endregion
 
-        public SinglePool():base(5)
+        #region 构造方法
+        public SinglePool():base()
         {
             objectList = new Dictionary<string, T>();
             order = new List<string>();
         }
 
+        public SinglePool(int max):base(max)
+        {
+            objectList = new Dictionary<string, T>();
+            order = new List<string>();
+        }
+        #endregion
+
+        #region 对外的接口方法
         public T LoadFromResources<E>(string name) where E : T
         {
             T t = default(T);
@@ -227,12 +378,28 @@ public class PoolManager :MonoBehaviour{
                     return t;
                 }
                 NumOfPool++;
-                objectList.Add(name, t);
                 order.Add(name);
+                objectList.Add(name, t);
             }
             return t;
         }
+        #endregion
+       
+        #region  私有方法
+        protected override void CleanByLRU()
+        {
+            base.CleanByLRU();
+            T t = null;
+            if(order.Count!=0 && objectList.TryGetValue(order[0], out t))
+            {
+                objectList.Remove(order[0]);
+                order.RemoveAt(0);
+                Resources.UnloadAsset(t);
+            }
+        }
+        #endregion
 
+        #region 有固定的调用场景的public方法
         public void Print(string s)
         {
             Debug.Log(s);
@@ -246,20 +413,8 @@ public class PoolManager :MonoBehaviour{
                 Debug.LogWarning(str);
             }
         }
-
-        public override void CleanByLRU()
-        {
-            base.CleanByLRU();
-            T t = null;
-            if(order.Count!=0 && objectList.TryGetValue(order[0], out t))
-            {
-                objectList.Remove(order[0]);
-                order.RemoveAt(0);
-                Resources.UnloadAsset(t);
-            }
-        }
-    } 
-    
+        #endregion
+    }
     #endregion
 
     #region 单例模式
@@ -278,6 +433,9 @@ public class PoolManager :MonoBehaviour{
     private ListPool<object> normalClassPool;
     private SinglePool<Object> softSourcePool;
     private SinglePool<GameObject> gameObjectCache;
+
+    [SerializeField]
+    private bool DestroyTimeFlag = true;
     #endregion
 
     #region 初始化
@@ -294,8 +452,10 @@ public class PoolManager :MonoBehaviour{
             normalClassPool = new ListPool<object>();
             softSourcePool = new SinglePool<Object>();
             gameObjectCache = new SinglePool<GameObject>();
+            gameObjectPool.destroyDelegate = new DestroyDelegate<GameObject>(DestroyAchive);
             instance = this;
             DontDestroyOnLoad(gameObject);
+            StartCoroutine(DestroyByTime());
         }
     }
     #endregion
@@ -315,6 +475,7 @@ public class PoolManager :MonoBehaviour{
             obj = gameObjectCache.LoadFromResources<GameObject>(name);
             obj = Instantiate(obj);
             obj.name = name;
+            gameObjectPool.AddToOnUse(name,obj);
         }
         else
             obj.SetActive(true);
@@ -330,9 +491,13 @@ public class PoolManager :MonoBehaviour{
     {
         T obj = default(T);
         System.Type type = typeof(T);
-        obj = (T)normalClassPool.Load(type.Name);
-        if(obj == null)
+        string name = type.Name;
+        obj = (T)normalClassPool.Load(name);
+        if (obj == null)
+        {
             obj = new T();
+            normalClassPool.AddToOnUse(name, obj);
+        }
         return obj; 
     }
 
@@ -371,21 +536,37 @@ public class PoolManager :MonoBehaviour{
         obj.SetActive(false);
         gameObjectPool.Recycle(obj.name,obj);
     }
+    #endregion
 
-    public void RecycleObject(GameObject obj,int max)
+    #region 删除方法
+    /// <summary>
+    /// 非泛型方法，传入游戏物体，开始删除历程
+    /// </summary>
+    /// <param name="obj"></param>
+    public void DestroyObject(GameObject obj)
     {
-        obj.SetActive(false);
-        gameObjectPool.Recycle(obj.name, obj,max);
+        gameObjectPool.DestroyObj(obj.name, obj);
     }
 
-    public void RecycleObject<T>(T t,int max)
+    /// <summary>
+    /// 泛型方法，传入类型和对象，开始删除历程
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="t"></param>
+    public void DestroyObject<T>(T t)
     {
-        System.Type type = typeof(T);
-        normalClassPool.Recycle(type.Name, t,max);
+        string name = typeof(T).Name;
+        normalClassPool.DestroyObj(name, t);
     }
     #endregion
 
-    #region TODO
+    #region 特殊方法
+    //用于委托的删除函数方法体
+    private void DestroyAchive(GameObject obj)
+    {
+        Destroy(obj);
+    }
+
     public void Print()
     {
         gameObjectPool.Print("---------------gameObjectPool-------------------");
@@ -394,9 +575,16 @@ public class PoolManager :MonoBehaviour{
         gameObjectCache.Print("---------------gameObjectCache-------------------");
     }
 
-    private void Release()
+    //固定时间遍历对象池，将池中的物体纳入删除历程
+    IEnumerator DestroyByTime()
     {
-
+        while(DestroyTimeFlag)
+        {
+            yield return new WaitForSeconds(20);
+            gameObjectPool.DestroyByTime();
+            normalClassPool.DestroyByTime();
+        }
+        yield return null;
     }
     #endregion
 }
