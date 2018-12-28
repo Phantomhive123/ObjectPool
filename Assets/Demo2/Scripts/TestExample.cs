@@ -10,6 +10,8 @@ public class TestExample : MonoBehaviour {
     List<GameObject> gameobjList=new List<GameObject>();
     List<object> objList=new List<object>();
     List<object> objList1 = new List<object>();
+    public GameObject TheObj;
+
     //List<Object> softScource=new List<Object>();
 
 	// Use this for initialization
@@ -80,6 +82,28 @@ public class TestExample : MonoBehaviour {
         }
     }
 
+    public void DestroyCertainGameObjects(string s)
+    {
+        for(int i=0;i<gameobjList.Count;i++)
+        {
+            if (gameobjList[i].name == s)
+                gameobjList.RemoveAt(i);
+        }
+        PoolManager.Instance.DestroyCertainObjs(s);
+    }
+
+    public void DestroyGameObj()
+    {
+        gameobjList.Remove(TheObj);
+        PoolManager.Instance.DestroyObject(TheObj);
+    }
+
+    public void DestroyGameObjImmediately()
+    {
+        gameobjList.Remove(TheObj);
+        PoolManager.Instance.DestroyImmediately(TheObj);
+    }
+
     [MenuItem("Tools/Clear Console %&c")]
     public static void ClearConsole()
     {
@@ -88,8 +112,6 @@ public class TestExample : MonoBehaviour {
         MethodInfo clearConsoleMethod = logEntries.GetMethod("Clear");
         clearConsoleMethod.Invoke(new object(), null);
     }
-
-
 }
 
 public class test

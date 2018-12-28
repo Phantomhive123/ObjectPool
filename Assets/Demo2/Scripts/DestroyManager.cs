@@ -17,8 +17,9 @@ public class DestroyManager : MonoBehaviour {
         set { }
     }
 
-    private void Awake()
-    {
+    // Use this for initialization
+    void Start () {
+
         if (instance == null)
         {
             instance = this;
@@ -26,19 +27,9 @@ public class DestroyManager : MonoBehaviour {
         }
         else
             DestroyImmediate(gameObject);
-    }
-
-    // Use this for initialization
-    void Start () {
 
         destroyList = new Dictionary<object, Coroutine>();
-
-	}
-	
-	// Update is called once per frame
-	void Update () {
-		
-	}
+    }
 
     public void StartDestroy<T>(T t, DestroyDelegate<T> destroyDelegate)
     {

@@ -136,22 +136,25 @@ public class PoolManager :MonoBehaviour{
         
         public void CleanAllTheObjects()
         {
-            foreach (T t in list)
+            des -= RemoveFromQueue;
+
+            for (int i = 0; i < list.Count; i++)
             {
-                des(t);
+                des(list[i]);
+            }
+            for (int i = 0; i < onUse.Count; i++)
+            {
+                des(onUse[i]);
+            }
+            for (int i = 0; i < destroyQueue.Count; i++)
+            {
+                DestroyManager.Instance.CancelDestroy(destroyQueue[i]);
+                des(destroyQueue[i]);
             }
             list.Clear();
-            foreach (T t in onUse)
-            {
-                des(t);
-            }
             onUse.Clear();
-            foreach (T t in destroyQueue)
-            {
-                DestroyManager.Instance.CancelDestroy(t);
-                des(t);
-            }  
             destroyQueue.Clear();
+            des += RemoveFromQueue;
         }
         
         public void DestroyImmediately(T t)
@@ -187,7 +190,7 @@ public class PoolManager :MonoBehaviour{
         {
             Debug.Log("List:" + list.Count);
             Debug.Log("OnUse:" + onUse.Count);
-            Debug.Log("DestroyQueue" + destroyQueue.Count);
+            Debug.Log("DestroyQueue:" + destroyQueue.Count);
         }
         
         //主要是为了把从缓存中获取的物体纳入对象池的管理
@@ -545,6 +548,7 @@ public class PoolManager :MonoBehaviour{
     /// <param name="obj"></param>
     public void DestroyObject(GameObject obj)
     {
+        obj.SetActive(false);
         gameObjectPool.DestroyObj(obj.name, obj);
     }
 
@@ -557,6 +561,45 @@ public class PoolManager :MonoBehaviour{
     {
         string name = typeof(T).Name;
         normalClassPool.DestroyObj(name, t);
+    }
+
+    /// <summary>
+    /// 非泛型方法，立刻删除某个游戏物体
+    /// </summary>
+    /// <param name="obj"></param>
+    public void DestroyImmediately(GameObject obj)
+    {
+        gameObjectPool.DestroyImmediately(obj.name, obj);
+    }
+
+    /// <summary>
+    /// 泛型方法，立刻删除某个非mono的类，需要传入类型和对象
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="t"></param>
+    public void DestroyImmediately<T>(T t)
+    {
+        string name = typeof(T).Name;
+        normalClassPool.DestroyImmediately(name, t);
+    }
+
+    /// <summary>
+    /// 删除某一路径下的所有被对象池监控的游戏物体
+    /// </summary>
+    /// <param name="s"></param>
+    public void DestroyCertainObjs(string s)
+    {
+        gameObjectPool.DestroyCertainObjs(s);
+    }
+
+    /// <summary>
+    /// 删除某一类的被对象池监控的所有实例，泛型方法传入类型
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    public void DestroyCertainObjs<T>()
+    {
+        string name = typeof(T).Name;
+        normalClassPool.DestroyCertainObjs(name);
     }
     #endregion
 
